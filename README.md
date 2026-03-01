@@ -77,3 +77,36 @@ For higher product value, add placement/inspection in AR:
 - **ARKit** (iOS)
 
 This enables users to place the generated structure in physical space for review.
+
+## 6) Terminal Backend Prototype (Implemented)
+
+A basic backend pipeline is now included in `backend/`.
+
+### Install dependencies
+
+```bash
+# No external packages needed for this prototype.
+# (requirements.txt is intentionally empty of third-party deps)
+```
+
+### Run conversion
+
+```bash
+python -m backend.cli path/to/blueprint.png output/model.obj
+```
+
+Useful options:
+
+- `--wall-height`: wall extrusion height in meters (default `3.0`)
+- `--scale`: meters per pixel conversion factor (default `0.02`)
+- `--min-area`: ignore tiny wall-like connected regions
+- `--threshold`: grayscale threshold for wall detection
+
+### What this prototype does
+
+1. Loads grayscale blueprint image.
+2. Converts image to grayscale and binarizes potential wall pixels.
+3. Finds connected components and converts them to wall bounding boxes.
+4. Extrudes each box edge vertically into a simple OBJ mesh.
+
+This is intentionally minimal and terminal-driven so you can plug it into larger services later.
