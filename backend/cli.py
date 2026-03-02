@@ -26,6 +26,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=180,
         help="Binarization threshold (0-255), lower means stricter dark-wall detection",
     )
+    parser.add_argument(
+        "--min-wall-span",
+        type=int,
+        default=20,
+        help="Minimum long-side span (pixels) for wall-like components",
+    )
+    parser.add_argument(
+        "--min-wall-thickness",
+        type=int,
+        default=2,
+        help="Minimum short-side span (pixels) for wall-like components",
+    )
+    parser.add_argument(
+        "--min-density",
+        type=float,
+        default=0.08,
+        help="Minimum fill density (area/bbox) for wall-like components",
+    )
+    parser.add_argument(
+        "--cleanup-iterations",
+        type=int,
+        default=1,
+        help="Morphological cleanup iterations to remove thin text/noise",
+    )
     return parser
 
 
@@ -37,10 +61,14 @@ def main() -> None:
         meters_per_pixel=args.scale,
         min_component_area_px=args.min_area,
         binarization_threshold=args.threshold,
+        min_wall_span_px=args.min_wall_span,
+        min_wall_thickness_px=args.min_wall_thickness,
+        min_component_density=args.min_density,
+        cleanup_iterations=args.cleanup_iterations,
     )
 
     process_blueprint_to_obj(args.input_image, args.output_obj, config)
-    print(f"✅ Wrote OBJ model to: {args.output_obj}")
+    print(f"Wrote OBJ model to: {args.output_obj}")
 
 
 if __name__ == "__main__":

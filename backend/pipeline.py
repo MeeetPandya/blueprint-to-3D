@@ -13,6 +13,10 @@ class BlueprintTo3DConfig:
     meters_per_pixel: float = 0.02
     min_component_area_px: int = 200
     binarization_threshold: int = 180
+    min_wall_span_px: int = 20
+    min_wall_thickness_px: int = 2
+    min_component_density: float = 0.08
+    cleanup_iterations: int = 1
 
 
 def _paeth(a: int, b: int, c: int) -> int:
@@ -177,11 +181,51 @@ def binarize(grayscale: list[list[int]], threshold: int) -> list[list[int]]:
     return [[1 if px < threshold else 0 for px in row] for row in grayscale]
 
 
-def connected_components(binary: list[list[int]], min_area: int) -> list[tuple[int, int, int, int]]:
+def _erode(binary: list[list[int]]) -> list[list[int]]:
+    height = len(binary)
+    width = len(binary[0]) if height else 0
+    out = [[0] * width for _ in range(height)]
+    for y in range(1, height - 1):
+        for x in range(1, width - 1):
+            keep = 1
+            for ny in (y - 1, y, y + 1):
+                for nx in (x - 1, x, x + 1):
+                    if binary[ny][nx] == 0:
+                        keep = 0
+                        break
+                if keep == 0:
+                    break
+            out[y][x] = keep
+    return out
+
+
+def _dilate(binary: list[list[int]]) -> list[list[int]]:
+    height = len(binary)
+    width = len(binary[0]) if height else 0
+    out = [[0] * width for _ in range(height)]
+    for y in range(height):
+        for x in range(width):
+            if binary[y][x] == 1:
+                for ny in range(max(0, y - 1), min(height, y + 2)):
+                    for nx in range(max(0, x - 1), min(width, x + 2)):
+                        out[ny][nx] = 1
+    return out
+
+
+def cleanup_binary(binary: list[list[int]], iterations: int) -> list[list[int]]:
+    cleaned = binary
+    for _ in range(max(0, iterations)):
+        cleaned = _dilate(_erode(cleaned))
+    return cleaned
+
+
+def connected_components(
+    binary: list[list[int]],
+) -> list[dict[str, int | list[tuple[int, int]]]]:
     height = len(binary)
     width = len(binary[0]) if height else 0
     visited = [[False] * width for _ in range(height)]
-    boxes = []
+    components = []
 
     for y in range(height):
         for x in range(width):
@@ -193,10 +237,12 @@ def connected_components(binary: list[list[int]], min_area: int) -> list[tuple[i
             area = 0
             min_x = max_x = x
             min_y = max_y = y
+            pixels: list[tuple[int, int]] = []
 
             while q:
                 cx, cy = q.popleft()
                 area += 1
+                pixels.append((cx, cy))
                 min_x = min(min_x, cx)
                 max_x = max(max_x, cx)
                 min_y = min(min_y, cy)
@@ -207,40 +253,110 @@ def connected_components(binary: list[list[int]], min_area: int) -> list[tuple[i
                         visited[ny][nx] = True
                         q.append((nx, ny))
 
-            if area >= min_area:
-                boxes.append((min_x, min_y, max_x, max_y))
+            components.append(
+                {
+                    "area": area,
+                    "min_x": min_x,
+                    "min_y": min_y,
+                    "max_x": max_x,
+                    "max_y": max_y,
+                    "pixels": pixels,
+                }
+            )
 
-    return boxes
+    return components
 
 
-def boxes_to_obj(boxes: list[tuple[int, int, int, int]], output_path: Path, config: BlueprintTo3DConfig) -> None:
+def extract_wall_mask(binary: list[list[int]], config: BlueprintTo3DConfig) -> list[list[int]]:
+    cleaned = cleanup_binary(binary, config.cleanup_iterations)
+    components = connected_components(cleaned)
+    height = len(cleaned)
+    width = len(cleaned[0]) if height else 0
+    wall_mask = [[0] * width for _ in range(height)]
+
+    for component in components:
+        area = int(component["area"])
+        min_x = int(component["min_x"])
+        min_y = int(component["min_y"])
+        max_x = int(component["max_x"])
+        max_y = int(component["max_y"])
+        bbox_w = max_x - min_x + 1
+        bbox_h = max_y - min_y + 1
+        long_span = max(bbox_w, bbox_h)
+        short_span = min(bbox_w, bbox_h)
+        bbox_area = bbox_w * bbox_h
+        density = area / bbox_area if bbox_area else 0.0
+
+        keep = (
+            area >= config.min_component_area_px
+            and long_span >= config.min_wall_span_px
+            and short_span >= config.min_wall_thickness_px
+            and density >= config.min_component_density
+        )
+
+        if keep:
+            pixels = component["pixels"]
+            if isinstance(pixels, list):
+                for x, y in pixels:
+                    wall_mask[y][x] = 1
+
+    return wall_mask
+
+
+def wall_mask_to_obj(wall_mask: list[list[int]], output_path: Path, config: BlueprintTo3DConfig) -> None:
+    height = len(wall_mask)
+    width = len(wall_mask[0]) if height else 0
     vertices: list[tuple[float, float, float]] = []
     faces: list[tuple[int, int, int]] = []
+    vertex_index: dict[tuple[float, float, float], int] = {}
 
-    for min_x, min_y, max_x, max_y in boxes:
-        rect = [
-            (min_x * config.meters_per_pixel, min_y * config.meters_per_pixel),
-            (max_x * config.meters_per_pixel, min_y * config.meters_per_pixel),
-            (max_x * config.meters_per_pixel, max_y * config.meters_per_pixel),
-            (min_x * config.meters_per_pixel, max_y * config.meters_per_pixel),
-        ]
+    def get_vertex_idx(v: tuple[float, float, float]) -> int:
+        idx = vertex_index.get(v)
+        if idx is not None:
+            return idx
+        idx = len(vertices) + 1
+        vertex_index[v] = idx
+        vertices.append(v)
+        return idx
 
-        for i in range(4):
-            x1, y1 = rect[i]
-            x2, y2 = rect[(i + 1) % 4]
-            base = len(vertices) + 1
-            vertices.extend(
-                [
-                    (x1, y1, 0.0),
-                    (x2, y2, 0.0),
-                    (x2, y2, config.wall_height_m),
-                    (x1, y1, config.wall_height_m),
-                ]
-            )
-            faces.extend([(base, base + 1, base + 2), (base, base + 2, base + 3)])
+    def add_quad(
+        v1: tuple[float, float, float],
+        v2: tuple[float, float, float],
+        v3: tuple[float, float, float],
+        v4: tuple[float, float, float],
+    ) -> None:
+        i1 = get_vertex_idx(v1)
+        i2 = get_vertex_idx(v2)
+        i3 = get_vertex_idx(v3)
+        i4 = get_vertex_idx(v4)
+        faces.append((i1, i2, i3))
+        faces.append((i1, i3, i4))
+
+    for y in range(height):
+        for x in range(width):
+            if wall_mask[y][x] == 0:
+                continue
+
+            x0 = x * config.meters_per_pixel
+            x1 = (x + 1) * config.meters_per_pixel
+            y0 = y * config.meters_per_pixel
+            y1 = (y + 1) * config.meters_per_pixel
+            z0 = 0.0
+            z1 = config.wall_height_m
+
+            add_quad((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1))
+
+            if y == 0 or wall_mask[y - 1][x] == 0:
+                add_quad((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1))
+            if y == height - 1 or wall_mask[y + 1][x] == 0:
+                add_quad((x1, y1, z0), (x0, y1, z0), (x0, y1, z1), (x1, y1, z1))
+            if x == 0 or wall_mask[y][x - 1] == 0:
+                add_quad((x0, y1, z0), (x0, y0, z0), (x0, y0, z1), (x0, y1, z1))
+            if x == width - 1 or wall_mask[y][x + 1] == 0:
+                add_quad((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1))
 
     if not vertices:
-        raise ValueError("No wall-like regions detected. Try lowering threshold/min area.")
+        raise ValueError("No wall-like regions detected. Try lowering threshold/min area or span filters.")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
@@ -257,5 +373,5 @@ def process_blueprint_to_obj(
     config = config or BlueprintTo3DConfig()
     grayscale = read_grayscale_image(image_path)
     binary = binarize(grayscale, config.binarization_threshold)
-    boxes = connected_components(binary, config.min_component_area_px)
-    boxes_to_obj(boxes, output_path, config)
+    wall_mask = extract_wall_mask(binary, config)
+    wall_mask_to_obj(wall_mask, output_path, config)
