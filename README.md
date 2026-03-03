@@ -110,3 +110,47 @@ Useful options:
 4. Extrudes each box edge vertically into a simple OBJ mesh.
 
 This is intentionally minimal and terminal-driven so you can plug it into larger services later.
+
+## 7) Web Frontend + API (Added)
+
+A built-in web server now exposes API routes and serves a browser frontend.
+
+### Start server
+
+```bash
+python -m backend.server --host 127.0.0.1 --port 8000
+```
+
+Open: `http://127.0.0.1:8000`
+
+### Frontend routes
+
+- `/` Home
+- `/convert` Conversion form
+- `/models` Generated model listing
+
+### API routes
+
+- `GET /api/health` -> service status
+- `GET /api/models` -> list generated OBJ files
+- `GET /api/models/{name}` -> download a specific OBJ
+- `POST /api/convert` -> upload raw PNG/PGM bytes and generate OBJ
+
+`POST /api/convert` supports query parameters matching CLI config:
+
+- `wall_height`
+- `scale`
+- `min_area`
+- `threshold`
+- `min_wall_span`
+- `min_wall_thickness`
+- `min_density`
+- `cleanup_iterations`
+
+Example:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/convert?wall_height=3.0&scale=0.02" \
+  -H "Content-Type: image/png" \
+  --data-binary "@sample.png"
+```

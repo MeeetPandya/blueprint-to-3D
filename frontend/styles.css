@@ -1,0 +1,155 @@
+:root {
+  --bg: #f7f6f3;
+  --panel: #ffffff;
+  --ink: #252b34;
+  --accent: #0f766e;
+  --line: #d9dfdd;
+  --danger: #b00020;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: radial-gradient(circle at top right, #e7efe8, var(--bg));
+  color: var(--ink);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+}
+
+nav {
+  display: flex;
+  gap: 0.75rem;
+}
+
+nav a {
+  text-decoration: none;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+}
+
+nav a.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pill {
+  font-size: 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.6rem;
+}
+
+main {
+  max-width: 980px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.viewer-layout {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.viewer-canvas {
+  width: 100%;
+  min-height: 300px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fbfcfd;
+}
+
+.viewer-meta {
+  margin: 0.65rem 0 0;
+  font-size: 0.9rem;
+  color: #5e6977;
+}
+
+.row-actions {
+  margin-top: 0.35rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.92rem;
+}
+
+input,
+button {
+  font: inherit;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+button {
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+button.view-obj-btn {
+  padding: 0.35rem 0.7rem;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.list-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.7rem;
+  background: #fff;
+}
+
+@media (max-width: 700px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .viewer-canvas {
+    min-height: 220px;
+  }
+}
